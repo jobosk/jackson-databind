@@ -1527,4 +1527,17 @@ public abstract class SerializerProvider
         */
         return df;
     }
+
+    /**
+     * This method wipes out from memory all recollection of visited
+     * items used to avoid recursive serialization due to circular
+     * references.
+     * Note: This method used from within serialization logic of a
+     * single object could indeed cause recursive serialization,
+     * disabling the necessary measures to distinguish already
+     * serialized elements from those that have not yet been.
+     */
+    public void resetMemoryCircularReference() {
+        // empty method to guarantee backwards compatibility
+    }
 }

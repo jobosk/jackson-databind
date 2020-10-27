@@ -92,8 +92,12 @@ public class CollectionSerializer
      */
 
     @Override
-    public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException
-    {
+    public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException {
+        serialize(value, g, provider, false);
+    }
+
+    public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
         if (len == 1) {
             if (((_unwrapSingle == null) &&
@@ -104,13 +108,17 @@ public class CollectionSerializer
             }
         }
         g.writeStartArray(value, len);
-        serializeContents(value, g, provider);
+        serializeContents(value, g, provider, handleCircularReferencesIndividually);
         g.writeEndArray();
     }
-    
+
     @Override
-    public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException
-    {
+    public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException {
+        serializeContents(value, g, provider, false);
+    }
+
+    public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         g.setCurrentValue(value);
         if (_elementSerializer != null) {
             serializeContentsUsing(value, g, provider, _elementSerializer);
@@ -127,6 +135,9 @@ public class CollectionSerializer
         try {
             do {
                 Object elem = it.next();
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 if (elem == null) {
                     provider.defaultSerializeNull(g);
                 } else {
