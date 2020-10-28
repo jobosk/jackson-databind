@@ -1,8 +1,15 @@
 package com.fasterxml.jackson.databind.ser;
 
-import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.BeanProperty;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
+import com.fasterxml.jackson.databind.ser.std.AsArraySerializerBase;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+
+import java.io.IOException;
 
 /**
  * Intermediate base class for serializers used for serializing
@@ -13,8 +20,7 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
  */
 @SuppressWarnings("serial")
 public abstract class ContainerSerializer<T>
-    extends StdSerializer<T>
-{
+        extends StdSerializer<T> {
     /*
     /**********************************************************
     /* Construction, initialization
@@ -31,11 +37,11 @@ public abstract class ContainerSerializer<T>
     protected ContainerSerializer(JavaType fullType) {
         super(fullType);
     }
-    
+
     /**
      * Alternate constructor that is (alas!) needed to work
      * around kinks of generic type handling
-     * 
+     *
      * @param t
      */
     protected ContainerSerializer(Class<?> t, boolean dummy) {
@@ -45,16 +51,16 @@ public abstract class ContainerSerializer<T>
     protected ContainerSerializer(ContainerSerializer<?> src) {
         super(src._handledType, false);
     }
-    
+
     /**
      * Factory(-like) method that can be used to construct a new container
      * serializer that uses specified {@link TypeSerializer} for decorating
      * contained values with additional type information.
-     * 
+     *
      * @param vts Type serializer to use for contained values; can be null,
-     *    in which case 'this' serializer is returned as is
+     *            in which case 'this' serializer is returned as is
      * @return Serializer instance that uses given type serializer for values if
-     *    that is possible (or if not, just 'this' serializer)
+     * that is possible (or if not, just 'this' serializer)
      */
     public ContainerSerializer<?> withValueTypeSerializer(TypeSerializer vts) {
         if (vts == null) return this;
@@ -97,12 +103,12 @@ public abstract class ContainerSerializer<T>
     /**
      * Method called to determine if the given value (of type handled by
      * this serializer) contains exactly one element.
-     *<p>
+     * <p>
      * Note: although it might seem sensible to instead define something
      * like "getElementCount()" method, this would not work well for
      * containers that do not keep track of size (like linked lists may
      * not).
-     *<p>
+     * <p>
      * Note, too, that as of now (2.9) this method is only called by serializer
      * itself; and specifically is not used for non-array/collection types
      * like <code>Map</code> or <code>Map.Entry</code> instances.
@@ -126,16 +132,14 @@ public abstract class ContainerSerializer<T>
      * Helper method used to encapsulate logic for determining whether there is
      * a property annotation that overrides element type; if so, we can
      * and need to statically find the serializer.
-     * 
-     * @since 2.1
      *
+     * @since 2.1
      * @deprecated Since 2.7: should not be needed; should be enough to see if
-     *     type has 'isStatic' modifier
+     * type has 'isStatic' modifier
      */
     @Deprecated
     protected boolean hasContentTypeAnnotation(SerializerProvider provider,
-            BeanProperty property)
-    {
+                                               BeanProperty property) {
         /*
         if (property != null) {
             AnnotationIntrospector intr = provider.getAnnotationIntrospector();
@@ -148,5 +152,34 @@ public abstract class ContainerSerializer<T>
         }
         */
         return false;
+    }
+
+    protected void serializeElement(JsonSerializer<Object> serializer, Object elem, JsonGenerator g
+            , SerializerProvider provider, TypeSerializer typeSer, boolean handleCircularReferencesIndividually)
+            throws IOException {
+        if (serializer instanceof AsArraySerializerBase) {
+            serializeArrayElement((AsArraySerializerBase) serializer, elem, g, provider, typeSer, handleCircularReferencesIndividually);
+        } else {
+            serializeElement(serializer, elem, g, provider, typeSer);
+        }
+    }
+
+    private void serializeElement(JsonSerializer<Object> serializer, Object elem, JsonGenerator g
+            , SerializerProvider provider, TypeSerializer typeSer) throws IOException {
+        if (typeSer == null) {
+            serializer.serialize(elem, g, provider);
+        } else {
+            serializer.serializeWithType(elem, g, provider, typeSer);
+        }
+    }
+
+    private void serializeArrayElement(AsArraySerializerBase serializer, Object elem, JsonGenerator g
+            , SerializerProvider provider, TypeSerializer typeSer, boolean handleCircularReferencesIndividually)
+            throws IOException {
+        if (typeSer == null) {
+            serializer.serialize(elem, g, provider, handleCircularReferencesIndividually);
+        } else {
+            serializer.serializeWithType(elem, g, provider, typeSer, handleCircularReferencesIndividually);
+        }
     }
 }

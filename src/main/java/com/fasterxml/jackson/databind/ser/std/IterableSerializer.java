@@ -12,16 +12,15 @@ import com.fasterxml.jackson.databind.ser.ContainerSerializer;
 @JacksonStdImpl
 @SuppressWarnings("serial")
 public class IterableSerializer
-    extends AsArraySerializerBase<Iterable<?>>
-{
+        extends AsArraySerializerBase<Iterable<?>> {
     public IterableSerializer(JavaType elemType, boolean staticTyping,
-            TypeSerializer vts) {
+                              TypeSerializer vts) {
         super(Iterable.class, elemType, staticTyping, vts, null);
     }
 
     public IterableSerializer(IterableSerializer src, BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> valueSerializer,
-            Boolean unwrapSingle) {
+                              TypeSerializer vts, JsonSerializer<?> valueSerializer,
+                              Boolean unwrapSingle) {
         super(src, property, vts, valueSerializer, unwrapSingle);
     }
 
@@ -32,11 +31,11 @@ public class IterableSerializer
 
     @Override
     public IterableSerializer withResolved(BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> elementSerializer,
-            Boolean unwrapSingle) {
+                                           TypeSerializer vts, JsonSerializer<?> elementSerializer,
+                                           Boolean unwrapSingle) {
         return new IterableSerializer(this, property, vts, elementSerializer, unwrapSingle);
     }
-    
+
     @Override
     public boolean isEmpty(SerializerProvider prov, Iterable<?> value) {
         // Not really good way to implement this, but has to do for now:
@@ -59,34 +58,35 @@ public class IterableSerializer
     }
 
     @Override
-    public final void serialize(Iterable<?> value, JsonGenerator gen,
-        SerializerProvider provider)throws IOException
-    {
+    public final void serialize(Iterable<?> value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         if (((_unwrapSingle == null) &&
                 provider.isEnabled(SerializationFeature.WRITE_SINGLE_ELEM_ARRAYS_UNWRAPPED))
                 || (_unwrapSingle == Boolean.TRUE)) {
             if (hasSingleElement(value)) {
-                serializeContents(value, gen, provider);
+                serializeContents(value, gen, provider, handleCircularReferencesIndividually);
                 return;
             }
         }
         gen.writeStartArray(value);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
-    
+
     @Override
-    public void serializeContents(Iterable<?> value, JsonGenerator jgen,
-        SerializerProvider provider) throws IOException
-    {
+    public void serializeContents(Iterable<?> value, JsonGenerator jgen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         Iterator<?> it = value.iterator();
         if (it.hasNext()) {
             final TypeSerializer typeSer = _valueTypeSerializer;
             JsonSerializer<Object> prevSerializer = null;
             Class<?> prevClass = null;
-            
+
             do {
                 Object elem = it.next();
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 if (elem == null) {
                     provider.defaultSerializeNull(jgen);
                     continue;
@@ -103,11 +103,7 @@ public class IterableSerializer
                         prevClass = cc;
                     }
                 }
-                if (typeSer == null) {
-                    currSerializer.serialize(elem, jgen, provider);
-                } else {
-                    currSerializer.serializeWithType(elem, jgen, provider, typeSer);
-                }
+                serializeElement(currSerializer, elem, jgen, provider, typeSer, handleCircularReferencesIndividually);
             } while (it.hasNext());
         }
     }

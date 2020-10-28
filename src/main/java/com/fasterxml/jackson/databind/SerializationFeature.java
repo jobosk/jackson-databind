@@ -451,6 +451,17 @@ public enum SerializationFeature implements ConfigFeature
      * @since 2.3
      */
     USE_EQUALITY_FOR_OBJECT_ID(false)
+    ,
+
+    /**
+     * Feature that determines if serialization avoiding circular dependencies
+     * (i.e. remembering visited elements and fully serializing only the first)
+     * should be applied to collections as a whole, or should treat individually
+     * each item, "wiping the memory" for visited elements in every iteration.
+     *
+     * @since 2.13
+     */
+    HANDLE_CIRCULAR_REFERENCE_INDIVIDUALLY_FOR_COLLECTIONS(false)
     ;
 
     private final boolean _defaultState;

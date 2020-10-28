@@ -24,9 +24,8 @@ import com.fasterxml.jackson.databind.ser.impl.PropertySerializerMap;
  */
 @SuppressWarnings("serial")
 public abstract class AsArraySerializerBase<T>
-    extends ContainerSerializer<T>
-    implements ContextualSerializer
-{
+        extends ContainerSerializer<T>
+        implements ContextualSerializer {
     protected final JavaType _elementType;
 
     /**
@@ -74,8 +73,7 @@ public abstract class AsArraySerializerBase<T>
      * @since 2.6
      */
     protected AsArraySerializerBase(Class<?> cls, JavaType et, boolean staticTyping,
-            TypeSerializer vts, JsonSerializer<Object> elementSerializer)
-    {
+                                    TypeSerializer vts, JsonSerializer<Object> elementSerializer) {
         super(cls, false);
         _elementType = et;
         // static if explicitly requested, or if element type is final
@@ -89,12 +87,11 @@ public abstract class AsArraySerializerBase<T>
 
     /**
      * @deprecated Since 2.6 Use variants that either take 'src', or do NOT pass
-     *    BeanProperty
+     * BeanProperty
      */
     @Deprecated
     protected AsArraySerializerBase(Class<?> cls, JavaType et, boolean staticTyping,
-            TypeSerializer vts, BeanProperty property, JsonSerializer<Object> elementSerializer)
-    {
+                                    TypeSerializer vts, BeanProperty property, JsonSerializer<Object> elementSerializer) {
         // typing with generics is messy... have to resort to this:
         super(cls, false);
         _elementType = et;
@@ -109,9 +106,8 @@ public abstract class AsArraySerializerBase<T>
 
     @SuppressWarnings("unchecked")
     protected AsArraySerializerBase(AsArraySerializerBase<?> src,
-            BeanProperty property, TypeSerializer vts, JsonSerializer<?> elementSerializer,
-            Boolean unwrapSingle)
-    {
+                                    BeanProperty property, TypeSerializer vts, JsonSerializer<?> elementSerializer,
+                                    Boolean unwrapSingle) {
         super(src);
         _elementType = src._elementType;
         _staticTyping = src._staticTyping;
@@ -128,17 +124,16 @@ public abstract class AsArraySerializerBase<T>
      */
     @Deprecated
     protected AsArraySerializerBase(AsArraySerializerBase<?> src,
-            BeanProperty property, TypeSerializer vts, JsonSerializer<?> elementSerializer)
-    {
+                                    BeanProperty property, TypeSerializer vts, JsonSerializer<?> elementSerializer) {
         this(src, property, vts, elementSerializer, src._unwrapSingle);
     }
-    
+
     /**
      * @deprecated since 2.6: use the overloaded method that takes 'unwrapSingle'
      */
     @Deprecated
     public final AsArraySerializerBase<T> withResolved(BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> elementSerializer) {
+                                                       TypeSerializer vts, JsonSerializer<?> elementSerializer) {
         return withResolved(property, vts, elementSerializer, _unwrapSingle);
     }
 
@@ -146,15 +141,15 @@ public abstract class AsArraySerializerBase<T>
      * @since 2.6
      */
     public abstract AsArraySerializerBase<T> withResolved(BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> elementSerializer,
-            Boolean unwrapSingle);
+                                                          TypeSerializer vts, JsonSerializer<?> elementSerializer,
+                                                          Boolean unwrapSingle);
 
     /*
     /**********************************************************
     /* Post-processing
     /**********************************************************
      */
-    
+
     /**
      * This method is needed to resolve contextual annotations like
      * per-property overrides, as well as do recursive call
@@ -163,9 +158,8 @@ public abstract class AsArraySerializerBase<T>
      */
     @Override
     public JsonSerializer<?> createContextual(SerializerProvider serializers,
-            BeanProperty property)
-        throws JsonMappingException
-    {
+                                              BeanProperty property)
+            throws JsonMappingException {
         TypeSerializer typeSer = _valueTypeSerializer;
         if (typeSer != null) {
             typeSer = typeSer.forProperty(property);
@@ -173,7 +167,7 @@ public abstract class AsArraySerializerBase<T>
         JsonSerializer<?> ser = null;
         Boolean unwrapSingle = null;
         // First: if we have a property, may have property-annotation overrides
-        
+
         if (property != null) {
             final AnnotationIntrospector intr = serializers.getAnnotationIntrospector();
             AnnotatedMember m = property.getMember();
@@ -216,7 +210,7 @@ public abstract class AsArraySerializerBase<T>
     /* Accessors
     /**********************************************************
      */
-    
+
     @Override
     public JavaType getContentType() {
         return _elementType;
@@ -237,38 +231,49 @@ public abstract class AsArraySerializerBase<T>
     // at least if they can provide access to actual size of value and use `writeStartArray()`
     // variant that passes size of array to output, which is helpful with some data formats
     @Override
-    public void serialize(T value, JsonGenerator gen, SerializerProvider provider) throws IOException
-    {
+    public void serialize(T value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+        serialize(value, gen, provider, false);
+    }
+
+    public void serialize(T value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         if (provider.isEnabled(SerializationFeature.WRITE_SINGLE_ELEM_ARRAYS_UNWRAPPED)
                 && hasSingleElement(value)) {
-            serializeContents(value, gen, provider);
+            serializeContents(value, gen, provider, handleCircularReferencesIndividually);
             return;
         }
         gen.writeStartArray(value);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
 
     @Override
-    public void serializeWithType(T value, JsonGenerator g, SerializerProvider provider,
-            TypeSerializer typeSer) throws IOException
-    {
+    public void serializeWithType(T value, JsonGenerator g, SerializerProvider provider, TypeSerializer typeSer)
+            throws IOException {
+        serializeWithType(value, g, provider, typeSer, false);
+    }
+
+    public void serializeWithType(T value, JsonGenerator g, SerializerProvider provider, TypeSerializer typeSer
+            , boolean handleCircularReferencesIndividually) throws IOException {
         WritableTypeId typeIdDef = typeSer.writeTypePrefix(g,
                 typeSer.typeId(value, JsonToken.START_ARRAY));
         // [databind#631]: Assign current value, to be accessible by custom serializers
         g.setCurrentValue(value);
-        serializeContents(value, g, provider);
+        serializeContents(value, g, provider, handleCircularReferencesIndividually);
         typeSer.writeTypeSuffix(g, typeIdDef);
     }
 
-    protected abstract void serializeContents(T value, JsonGenerator gen, SerializerProvider provider)
-        throws IOException;
+    protected void serializeContents(T value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+        serializeContents(value, gen, provider, false);
+    }
+
+    protected abstract void serializeContents(T value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException;
 
     @SuppressWarnings("deprecation")
     @Override
     public JsonNode getSchema(SerializerProvider provider, Type typeHint)
-        throws JsonMappingException
-    {
+            throws JsonMappingException {
         ObjectNode o = createSchemaNode("array", true);
         if (_elementSerializer != null) {
             JsonNode schemaNode = null;
@@ -285,8 +290,7 @@ public abstract class AsArraySerializerBase<T>
 
     @Override
     public void acceptJsonFormatVisitor(JsonFormatVisitorWrapper visitor, JavaType typeHint)
-        throws JsonMappingException
-    {
+            throws JsonMappingException {
         JsonSerializer<?> valueSer = _elementSerializer;
         if (valueSer == null) {
             // 19-Oct-2016, tatu: Apparently we get null for untyped/raw `EnumSet`s... not 100%
@@ -299,8 +303,7 @@ public abstract class AsArraySerializerBase<T>
     }
 
     protected final JsonSerializer<Object> _findAndAddDynamic(PropertySerializerMap map,
-            Class<?> type, SerializerProvider provider) throws JsonMappingException
-    {
+                                                              Class<?> type, SerializerProvider provider) throws JsonMappingException {
         PropertySerializerMap.SerializerAndMapResult result = map.findAndAddSecondarySerializer(type, provider, _property);
         // did we get a new map of serializers? If so, start using it
         if (map != result.map) {
@@ -310,8 +313,7 @@ public abstract class AsArraySerializerBase<T>
     }
 
     protected final JsonSerializer<Object> _findAndAddDynamic(PropertySerializerMap map,
-            JavaType type, SerializerProvider provider) throws JsonMappingException
-    {
+                                                              JavaType type, SerializerProvider provider) throws JsonMappingException {
         PropertySerializerMap.SerializerAndMapResult result = map.findAndAddSecondarySerializer(type, provider, _property);
         if (map != result.map) {
             _dynamicSerializers = result.map;

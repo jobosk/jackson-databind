@@ -23,8 +23,7 @@ import com.fasterxml.jackson.databind.ser.impl.PropertySerializerMap;
  * to iterate over elements.
  */
 public class CollectionSerializer
-    extends AsArraySerializerBase<Collection<?>>
-{
+        extends AsArraySerializerBase<Collection<?>> {
     private static final long serialVersionUID = 1L;
 
     /*
@@ -37,7 +36,7 @@ public class CollectionSerializer
      * @since 2.6
      */
     public CollectionSerializer(JavaType elemType, boolean staticTyping, TypeSerializer vts,
-            JsonSerializer<Object> valueSerializer) {
+                                JsonSerializer<Object> valueSerializer) {
         super(Collection.class, elemType, staticTyping, vts, valueSerializer);
     }
 
@@ -46,17 +45,17 @@ public class CollectionSerializer
      */
     @Deprecated // since 2.6
     public CollectionSerializer(JavaType elemType, boolean staticTyping, TypeSerializer vts,
-            BeanProperty property, JsonSerializer<Object> valueSerializer) {
+                                BeanProperty property, JsonSerializer<Object> valueSerializer) {
         // note: assumption is 'property' is always passed as null
         this(elemType, staticTyping, vts, valueSerializer);
     }
-    
+
     public CollectionSerializer(CollectionSerializer src,
-            BeanProperty property, TypeSerializer vts, JsonSerializer<?> valueSerializer,
-            Boolean unwrapSingle) {
+                                BeanProperty property, TypeSerializer vts, JsonSerializer<?> valueSerializer,
+                                Boolean unwrapSingle) {
         super(src, property, vts, valueSerializer, unwrapSingle);
     }
-    
+
     @Override
     public ContainerSerializer<?> _withValueTypeSerializer(TypeSerializer vts) {
         return new CollectionSerializer(this, _property, vts, _elementSerializer, _unwrapSingle);
@@ -64,8 +63,8 @@ public class CollectionSerializer
 
     @Override
     public CollectionSerializer withResolved(BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> elementSerializer,
-            Boolean unwrapSingle) {
+                                             TypeSerializer vts, JsonSerializer<?> elementSerializer,
+                                             Boolean unwrapSingle) {
         return new CollectionSerializer(this, property, vts, elementSerializer, unwrapSingle);
     }
 
@@ -92,28 +91,28 @@ public class CollectionSerializer
      */
 
     @Override
-    public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException
-    {
+    public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
         if (len == 1) {
             if (((_unwrapSingle == null) &&
                     provider.isEnabled(SerializationFeature.WRITE_SINGLE_ELEM_ARRAYS_UNWRAPPED))
                     || (_unwrapSingle == Boolean.TRUE)) {
-                serializeContents(value, g, provider);
+                serializeContents(value, g, provider, handleCircularReferencesIndividually);
                 return;
             }
         }
         g.writeStartArray(value, len);
-        serializeContents(value, g, provider);
+        serializeContents(value, g, provider, handleCircularReferencesIndividually);
         g.writeEndArray();
     }
-    
+
     @Override
-    public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException
-    {
+    public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         g.setCurrentValue(value);
         if (_elementSerializer != null) {
-            serializeContentsUsing(value, g, provider, _elementSerializer);
+            serializeContentsUsing(value, g, provider, _elementSerializer, handleCircularReferencesIndividually);
             return;
         }
         Iterator<?> it = value.iterator();
@@ -127,6 +126,9 @@ public class CollectionSerializer
         try {
             do {
                 Object elem = it.next();
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 if (elem == null) {
                     provider.defaultSerializeNull(g);
                 } else {
@@ -141,11 +143,7 @@ public class CollectionSerializer
                         }
                         serializers = _dynamicSerializers;
                     }
-                    if (typeSer == null) {
-                        serializer.serialize(elem, g, provider);
-                    } else {
-                        serializer.serializeWithType(elem, g, provider, typeSer);
-                    }
+                    serializeElement(serializer, elem, g, provider, typeSer, handleCircularReferencesIndividually);
                 }
                 ++i;
             } while (it.hasNext());
@@ -154,24 +152,22 @@ public class CollectionSerializer
         }
     }
 
-    public void serializeContentsUsing(Collection<?> value, JsonGenerator g, SerializerProvider provider,
-            JsonSerializer<Object> ser) throws IOException
-    {
+    public void serializeContentsUsing(Collection<?> value, JsonGenerator g, SerializerProvider provider
+            , JsonSerializer<Object> ser, boolean handleCircularReferencesIndividually) throws IOException {
         Iterator<?> it = value.iterator();
         if (it.hasNext()) {
             TypeSerializer typeSer = _valueTypeSerializer;
             int i = 0;
             do {
                 Object elem = it.next();
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 try {
                     if (elem == null) {
                         provider.defaultSerializeNull(g);
                     } else {
-                        if (typeSer == null) {
-                            ser.serialize(elem, g, provider);
-                        } else {
-                            ser.serializeWithType(elem, g, provider, typeSer);
-                        }
+                        serializeElement(ser, elem, g, provider, typeSer, handleCircularReferencesIndividually);
                     }
                     ++i;
                 } catch (Exception e) {

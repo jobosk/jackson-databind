@@ -13,15 +13,14 @@ import com.fasterxml.jackson.databind.ser.std.AsArraySerializerBase;
 @SuppressWarnings("serial")
 @JacksonStdImpl
 public class IteratorSerializer
-    extends AsArraySerializerBase<Iterator<?>>
-{
+        extends AsArraySerializerBase<Iterator<?>> {
     public IteratorSerializer(JavaType elemType, boolean staticTyping, TypeSerializer vts) {
         super(Iterator.class, elemType, staticTyping, vts, null);
     }
 
     public IteratorSerializer(IteratorSerializer src,
-            BeanProperty property, TypeSerializer vts, JsonSerializer<?> valueSerializer,
-            Boolean unwrapSingle) {
+                              BeanProperty property, TypeSerializer vts, JsonSerializer<?> valueSerializer,
+                              Boolean unwrapSingle) {
         super(src, property, vts, valueSerializer, unwrapSingle);
     }
 
@@ -35,7 +34,7 @@ public class IteratorSerializer
         // no really good way to determine (without consuming iterator), so:
         return false;
     }
-    
+
     @Override
     public ContainerSerializer<?> _withValueTypeSerializer(TypeSerializer vts) {
         return new IteratorSerializer(this, _property, vts, _elementSerializer, _unwrapSingle);
@@ -43,15 +42,14 @@ public class IteratorSerializer
 
     @Override
     public IteratorSerializer withResolved(BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> elementSerializer,
-            Boolean unwrapSingle) {
+                                           TypeSerializer vts, JsonSerializer<?> elementSerializer,
+                                           Boolean unwrapSingle) {
         return new IteratorSerializer(this, property, vts, elementSerializer, unwrapSingle);
     }
 
     @Override
-    public final void serialize(Iterator<?> value, JsonGenerator gen,
-            SerializerProvider provider) throws IOException
-    {
+    public final void serialize(Iterator<?> value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         // 02-Dec-2016, tatu: As per comments above, can't determine single element so...
         /*
         if (((_unwrapSingle == null) &&
@@ -64,42 +62,44 @@ public class IteratorSerializer
         }
         */
         gen.writeStartArray(value);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
-    
+
     @Override
-    public void serializeContents(Iterator<?> value, JsonGenerator g,
-            SerializerProvider provider) throws IOException
-    {
+    public void serializeContents(Iterator<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         if (!value.hasNext()) {
             return;
         }
         JsonSerializer<Object> serializer = _elementSerializer;
         if (serializer == null) {
-            _serializeDynamicContents(value, g, provider);
+            _serializeDynamicContents(value, g, provider, handleCircularReferencesIndividually);
             return;
         }
         final TypeSerializer typeSer = _valueTypeSerializer;
         do {
             Object elem = value.next();
+            if (handleCircularReferencesIndividually) {
+                provider.resetMemoryCircularReference();
+            }
             if (elem == null) {
                 provider.defaultSerializeNull(g);
-            } else if (typeSer == null) {
-                serializer.serialize(elem, g, provider);
             } else {
-                serializer.serializeWithType(elem, g, provider, typeSer);
+                serializeElement(serializer, elem, g, provider, typeSer, handleCircularReferencesIndividually);
             }
         } while (value.hasNext());
     }
-    
-    protected void _serializeDynamicContents(Iterator<?> value, JsonGenerator g,
-            SerializerProvider provider) throws IOException
-    {
+
+    protected void _serializeDynamicContents(Iterator<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         final TypeSerializer typeSer = _valueTypeSerializer;
         PropertySerializerMap serializers = _dynamicSerializers;
         do {
             Object elem = value.next();
+            if (handleCircularReferencesIndividually) {
+                provider.resetMemoryCircularReference();
+            }
             if (elem == null) {
                 provider.defaultSerializeNull(g);
                 continue;
@@ -115,11 +115,7 @@ public class IteratorSerializer
                 }
                 serializers = _dynamicSerializers;
             }
-            if (typeSer == null) {
-                serializer.serialize(elem, g, provider);
-            } else {
-                serializer.serializeWithType(elem, g, provider, typeSer);
-            }
+            serializeElement(serializer, elem, g, provider, typeSer, handleCircularReferencesIndividually);
         } while (value.hasNext());
     }
 }

@@ -17,26 +17,24 @@ import com.fasterxml.jackson.databind.ser.std.AsArraySerializerBase;
  */
 @JacksonStdImpl
 public final class IndexedListSerializer
-    extends AsArraySerializerBase<List<?>>
-{
+        extends AsArraySerializerBase<List<?>> {
     private static final long serialVersionUID = 1L;
 
     public IndexedListSerializer(JavaType elemType, boolean staticTyping, TypeSerializer vts,
-            JsonSerializer<Object> valueSerializer)
-    {
+                                 JsonSerializer<Object> valueSerializer) {
         super(List.class, elemType, staticTyping, vts, valueSerializer);
     }
 
     public IndexedListSerializer(IndexedListSerializer src,
-            BeanProperty property, TypeSerializer vts, JsonSerializer<?> valueSerializer,
-            Boolean unwrapSingle) {
+                                 BeanProperty property, TypeSerializer vts, JsonSerializer<?> valueSerializer,
+                                 Boolean unwrapSingle) {
         super(src, property, vts, valueSerializer, unwrapSingle);
     }
 
     @Override
     public IndexedListSerializer withResolved(BeanProperty property,
-            TypeSerializer vts, JsonSerializer<?> elementSerializer,
-            Boolean unwrapSingle) {
+                                              TypeSerializer vts, JsonSerializer<?> elementSerializer,
+                                              Boolean unwrapSingle) {
         return new IndexedListSerializer(this, property, vts, elementSerializer, unwrapSingle);
     }
 
@@ -45,7 +43,7 @@ public final class IndexedListSerializer
     /* Accessors
     /**********************************************************
      */
-    
+
     @Override
     public boolean isEmpty(SerializerProvider prov, List<?> value) {
         return value.isEmpty();
@@ -58,38 +56,36 @@ public final class IndexedListSerializer
 
     @Override
     public ContainerSerializer<?> _withValueTypeSerializer(TypeSerializer vts) {
-        return new IndexedListSerializer(this, 
+        return new IndexedListSerializer(this,
                 _property, vts, _elementSerializer, _unwrapSingle);
     }
 
     @Override
-    public final void serialize(List<?> value, JsonGenerator gen, SerializerProvider provider)
-        throws IOException
-    {
+    public final void serialize(List<?> value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
         if (len == 1) {
             if (((_unwrapSingle == null) &&
                     provider.isEnabled(SerializationFeature.WRITE_SINGLE_ELEM_ARRAYS_UNWRAPPED))
                     || (_unwrapSingle == Boolean.TRUE)) {
-                serializeContents(value, gen, provider);
+                serializeContents(value, gen, provider, handleCircularReferencesIndividually);
                 return;
             }
         }
         gen.writeStartArray(value, len);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
-    
+
     @Override
-    public void serializeContents(List<?> value, JsonGenerator g, SerializerProvider provider)
-        throws IOException
-    {
+    public void serializeContents(List<?> value, JsonGenerator g, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         if (_elementSerializer != null) {
-            serializeContentsUsing(value, g, provider, _elementSerializer);
+            serializeContentsUsing(value, g, provider, _elementSerializer, handleCircularReferencesIndividually);
             return;
         }
         if (_valueTypeSerializer != null) {
-            serializeTypedContents(value, g, provider);
+            serializeTypedContents(value, g, provider, handleCircularReferencesIndividually);
             return;
         }
         final int len = value.size();
@@ -101,6 +97,9 @@ public final class IndexedListSerializer
             PropertySerializerMap serializers = _dynamicSerializers;
             for (; i < len; ++i) {
                 Object elem = value.get(i);
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 if (elem == null) {
                     provider.defaultSerializeNull(g);
                 } else {
@@ -116,18 +115,16 @@ public final class IndexedListSerializer
                         }
                         serializers = _dynamicSerializers;
                     }
-                    serializer.serialize(elem, g, provider);
+                    serializeElement(serializer, elem, g, provider, null, handleCircularReferencesIndividually);
                 }
             }
         } catch (Exception e) {
             wrapAndThrow(provider, e, value, i);
         }
     }
-    
-    public void serializeContentsUsing(List<?> value, JsonGenerator jgen, SerializerProvider provider,
-            JsonSerializer<Object> ser)
-        throws IOException
-    {
+
+    public void serializeContentsUsing(List<?> value, JsonGenerator jgen, SerializerProvider provider
+            , JsonSerializer<Object> ser, boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
         if (len == 0) {
             return;
@@ -135,13 +132,14 @@ public final class IndexedListSerializer
         final TypeSerializer typeSer = _valueTypeSerializer;
         for (int i = 0; i < len; ++i) {
             Object elem = value.get(i);
+            if (handleCircularReferencesIndividually) {
+                provider.resetMemoryCircularReference();
+            }
             try {
                 if (elem == null) {
                     provider.defaultSerializeNull(jgen);
-                } else if (typeSer == null) {
-                    ser.serialize(elem, jgen, provider);
                 } else {
-                    ser.serializeWithType(elem, jgen, provider, typeSer);
+                    serializeElement(ser, elem, jgen, provider, typeSer, handleCircularReferencesIndividually);
                 }
             } catch (Exception e) {
                 // [JACKSON-55] Need to add reference information
@@ -150,9 +148,8 @@ public final class IndexedListSerializer
         }
     }
 
-    public void serializeTypedContents(List<?> value, JsonGenerator jgen, SerializerProvider provider)
-        throws IOException
-    {
+    public void serializeTypedContents(List<?> value, JsonGenerator jgen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
         if (len == 0) {
             return;
@@ -163,6 +160,9 @@ public final class IndexedListSerializer
             PropertySerializerMap serializers = _dynamicSerializers;
             for (; i < len; ++i) {
                 Object elem = value.get(i);
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 if (elem == null) {
                     provider.defaultSerializeNull(jgen);
                 } else {
@@ -178,7 +178,7 @@ public final class IndexedListSerializer
                         }
                         serializers = _dynamicSerializers;
                     }
-                    serializer.serializeWithType(elem, jgen, provider, typeSer);
+                    serializeElement(serializer, elem, jgen, provider, typeSer, handleCircularReferencesIndividually);
                 }
             }
         } catch (Exception e) {
