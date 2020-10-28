@@ -47,10 +47,8 @@ public class EnumSetSerializer
         return value.size() == 1;
     }
 
-    @Override
-    public final void serialize(EnumSet<? extends Enum<?>> value, JsonGenerator gen,
-            SerializerProvider provider) throws IOException
-    {
+    public final void serialize(EnumSet<? extends Enum<?>> value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
         if (len == 1) {
             if (((_unwrapSingle == null)
@@ -61,21 +59,21 @@ public class EnumSetSerializer
             }
         }
         gen.writeStartArray(value, len);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
-    
-    @Override
-    public void serializeContents(EnumSet<? extends Enum<?>> value, JsonGenerator gen,
-            SerializerProvider provider)
-        throws IOException
-    {
+
+    public void serializeContents(EnumSet<? extends Enum<?>> value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         JsonSerializer<Object> enumSer = _elementSerializer;
         /* Need to dynamically find instance serializer; unfortunately
          * that seems to be the only way to figure out type (no accessors
          * to the enum class that set knows)
          */
         for (Enum<?> en : value) {
+            if (handleCircularReferencesIndividually) {
+                provider.resetMemoryCircularReference();
+            }
             if (enumSer == null) {
                 // 12-Jan-2010, tatu: Since enums cannot be polymorphic, let's
                 //   not bother with typed serializer variant here

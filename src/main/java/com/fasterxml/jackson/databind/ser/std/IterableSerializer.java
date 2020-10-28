@@ -59,9 +59,8 @@ public class IterableSerializer
     }
 
     @Override
-    public final void serialize(Iterable<?> value, JsonGenerator gen,
-        SerializerProvider provider)throws IOException
-    {
+    public final void serialize(Iterable<?> value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         if (((_unwrapSingle == null) &&
                 provider.isEnabled(SerializationFeature.WRITE_SINGLE_ELEM_ARRAYS_UNWRAPPED))
                 || (_unwrapSingle == Boolean.TRUE)) {
@@ -71,14 +70,13 @@ public class IterableSerializer
             }
         }
         gen.writeStartArray(value);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
     
     @Override
-    public void serializeContents(Iterable<?> value, JsonGenerator jgen,
-        SerializerProvider provider) throws IOException
-    {
+    public void serializeContents(Iterable<?> value, JsonGenerator jgen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         Iterator<?> it = value.iterator();
         if (it.hasNext()) {
             final TypeSerializer typeSer = _valueTypeSerializer;
@@ -87,6 +85,9 @@ public class IterableSerializer
             
             do {
                 Object elem = it.next();
+                if (handleCircularReferencesIndividually) {
+                    provider.resetMemoryCircularReference();
+                }
                 if (elem == null) {
                     provider.defaultSerializeNull(jgen);
                     continue;

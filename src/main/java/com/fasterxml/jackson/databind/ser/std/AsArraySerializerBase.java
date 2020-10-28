@@ -132,7 +132,7 @@ public abstract class AsArraySerializerBase<T>
     {
         this(src, property, vts, elementSerializer, src._unwrapSingle);
     }
-    
+
     /**
      * @deprecated since 2.6: use the overloaded method that takes 'unwrapSingle'
      */
@@ -154,7 +154,7 @@ public abstract class AsArraySerializerBase<T>
     /* Post-processing
     /**********************************************************
      */
-    
+
     /**
      * This method is needed to resolve contextual annotations like
      * per-property overrides, as well as do recursive call
@@ -173,7 +173,7 @@ public abstract class AsArraySerializerBase<T>
         JsonSerializer<?> ser = null;
         Boolean unwrapSingle = null;
         // First: if we have a property, may have property-annotation overrides
-        
+
         if (property != null) {
             final AnnotationIntrospector intr = serializers.getAnnotationIntrospector();
             AnnotatedMember m = property.getMember();
@@ -216,7 +216,7 @@ public abstract class AsArraySerializerBase<T>
     /* Accessors
     /**********************************************************
      */
-    
+
     @Override
     public JavaType getContentType() {
         return _elementType;
@@ -237,15 +237,19 @@ public abstract class AsArraySerializerBase<T>
     // at least if they can provide access to actual size of value and use `writeStartArray()`
     // variant that passes size of array to output, which is helpful with some data formats
     @Override
-    public void serialize(T value, JsonGenerator gen, SerializerProvider provider) throws IOException
-    {
+    public void serialize(T value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+        serialize(value, gen, provider, false);
+    }
+
+    public void serialize(T value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException {
         if (provider.isEnabled(SerializationFeature.WRITE_SINGLE_ELEM_ARRAYS_UNWRAPPED)
                 && hasSingleElement(value)) {
             serializeContents(value, gen, provider);
             return;
         }
         gen.writeStartArray(value);
-        serializeContents(value, gen, provider);
+        serializeContents(value, gen, provider, handleCircularReferencesIndividually);
         gen.writeEndArray();
     }
 
@@ -261,8 +265,12 @@ public abstract class AsArraySerializerBase<T>
         typeSer.writeTypeSuffix(g, typeIdDef);
     }
 
-    protected abstract void serializeContents(T value, JsonGenerator gen, SerializerProvider provider)
-        throws IOException;
+    protected void serializeContents(T value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+        serializeContents(value, gen, provider, false);
+    }
+
+    protected abstract void serializeContents(T value, JsonGenerator gen, SerializerProvider provider
+            , boolean handleCircularReferencesIndividually) throws IOException;
 
     @SuppressWarnings("deprecation")
     @Override

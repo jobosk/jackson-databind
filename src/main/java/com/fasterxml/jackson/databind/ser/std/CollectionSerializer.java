@@ -92,10 +92,6 @@ public class CollectionSerializer
      */
 
     @Override
-    public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException {
-        serialize(value, g, provider, false);
-    }
-
     public final void serialize(Collection<?> value, JsonGenerator g, SerializerProvider provider
             , boolean handleCircularReferencesIndividually) throws IOException {
         final int len = value.size();
@@ -113,10 +109,6 @@ public class CollectionSerializer
     }
 
     @Override
-    public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider) throws IOException {
-        serializeContents(value, g, provider, false);
-    }
-
     public void serializeContents(Collection<?> value, JsonGenerator g, SerializerProvider provider
             , boolean handleCircularReferencesIndividually) throws IOException {
         g.setCurrentValue(value);
