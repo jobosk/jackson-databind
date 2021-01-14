@@ -1,23 +1,33 @@
 package com.fasterxml.jackson.databind.jsontype.impl;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.BeanDescription;
 import com.fasterxml.jackson.databind.DatabindContext;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.cfg.MapperConfig;
+import com.fasterxml.jackson.databind.introspect.AnnotatedClass;
 import com.fasterxml.jackson.databind.jsontype.NamedType;
 
-public class TypeNameIdResolver extends TypeIdResolverBase
-{
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class TypeNameIdResolver extends TypeIdResolverBase {
     protected final MapperConfig<?> _config;
 
     /**
      * Mappings from class name to type id, used for serialization.
-     *<p>
+     * <p>
      * Since lazily constructed will require synchronization (either internal
      * by type, or external)
      */
@@ -25,7 +35,7 @@ public class TypeNameIdResolver extends TypeIdResolverBase
 
     /**
      * Mappings from type id to JavaType, used for deserialization.
-     *<p>
+     * <p>
      * Eagerly constructed, not modified, can use regular unsynchronized {@link Map}.
      */
     protected final Map<String, JavaType> _idToType;
@@ -36,9 +46,8 @@ public class TypeNameIdResolver extends TypeIdResolverBase
     protected final boolean _caseInsensitive;
 
     protected TypeNameIdResolver(MapperConfig<?> config, JavaType baseType,
-            ConcurrentHashMap<String, String> typeToId,
-            HashMap<String, JavaType> idToType)
-    {
+                                 ConcurrentHashMap<String, String> typeToId,
+                                 HashMap<String, JavaType> idToType) {
         super(baseType, config.getTypeFactory());
         _config = config;
         _typeToId = typeToId;
@@ -47,8 +56,7 @@ public class TypeNameIdResolver extends TypeIdResolverBase
     }
 
     public static TypeNameIdResolver construct(MapperConfig<?> config, JavaType baseType,
-            Collection<NamedType> subtypes, boolean forSer, boolean forDeser)
-    {
+                                               Collection<NamedType> subtypes, boolean forSer, boolean forDeser) {
         // sanity check
         if (forSer == forDeser) throw new IllegalArgumentException();
 
@@ -68,46 +76,111 @@ public class TypeNameIdResolver extends TypeIdResolverBase
             typeToId = new ConcurrentHashMap<>(4);
         }
         final boolean caseInsensitive = config.isEnabled(MapperFeature.ACCEPT_CASE_INSENSITIVE_VALUES);
+        populateSerDesMaps(baseType.getRawClass(), subtypes, config, forSer, typeToId, forDeser, idToType
+                , caseInsensitive, new HashSet<Class<?>>());
+        return new TypeNameIdResolver(config, baseType, typeToId, idToType);
+    }
 
+    private static void populateSerDesMaps(final Class<?> baseType, final Collection<NamedType> subtypes
+            , final MapperConfig<?> config, final boolean toSer, final ConcurrentHashMap<String, String> serMap
+            , final boolean toDes, final HashMap<String, JavaType> desMap, final boolean caseInsensitive
+            , final Set<Class<?>> visited) {
         if (subtypes != null) {
             for (NamedType t : subtypes) {
                 // no name? Need to figure out default; for now, let's just
                 // use non-qualified class name
                 Class<?> cls = t.getType();
-                String id = t.hasName() ? t.getName() : _defaultTypeId(cls);
-                if (forSer) {
-                    typeToId.put(cls.getName(), id);
-                }
-                if (forDeser) {
-                    // [databind#1983]: for case-insensitive lookups must canonicalize:
-                    if (caseInsensitive) {
-                        id = id.toLowerCase();
-                    }
-                    // One more problem; sometimes we have same name for multiple types;
-                    // if so, use most specific
-                    JavaType prev = idToType.get(id);
-                    if (prev != null) { // Can only override if more specific
-                        if (cls.isAssignableFrom(prev.getRawClass())) { // nope, more generic (or same)
-                            continue;
+                if (!visited.contains(cls)) {
+                    String id = t.hasName() ? t.getName() : _defaultTypeId(cls);
+                    if (toSer && serMap != null) {
+                        final String className = cls.getName();
+                        if (!serMap.contains(className)) {
+                            serMap.put(className, id);
                         }
                     }
-                    idToType.put(id, config.constructType(cls));
+                    if (toDes && desMap != null) {
+                        // [databind#1983]: for case-insensitive lookups must canonicalize:
+                        if (caseInsensitive) {
+                            id = id.toLowerCase();
+                        }
+                        // One more problem; sometimes we have same name for multiple types;
+                        // if so, use most specific
+                        JavaType prev = desMap.get(id);
+                        if (prev != null) { // Can only override if more specific
+                            if (cls.isAssignableFrom(prev.getRawClass())) { // nope, more generic (or same)
+                                continue;
+                            }
+                        }
+                        final JavaType type = config.constructType(cls);
+                        if (!desMap.containsValue(type)) {
+                            desMap.put(id, type);
+                        }
+                    }
+                    visited.add(cls);
                 }
             }
         }
-        return new TypeNameIdResolver(config, baseType, typeToId, idToType);
+        List<Class<?>> childClasses = getImplementations(baseType);
+        if (!childClasses.isEmpty()) {
+            for (Class childClass : childClasses) {
+                populateSerDesMaps(
+                        childClass
+                        , getSubTypes(config, childClass)
+                        , config
+                        , toSer
+                        , serMap
+                        , toDes
+                        , desMap
+                        , caseInsensitive
+                        , visited
+                );
+            }
+        }
+    }
+
+    private static Collection<NamedType> getSubTypes(MapperConfig<?> config, Class classType) {
+        final AnnotatedClass ac = config.introspectClassAnnotations(classType).getClassInfo();
+        return config.getSubtypeResolver().collectAndResolveSubtypesByTypeId(config, ac);
+    }
+
+    private static List<Class<?>> getImplementations(final Class<?> type) {
+        final List<Class<?>> result = new ArrayList<>();
+        try {
+            ServiceLoader loader = ServiceLoader.load(type);
+            for (Iterator iterator = loader.iterator(); iterator.hasNext(); ) {
+                result.add((Class<?>) iterator.next().getClass());
+            }
+        } catch (final Exception e) {
+            // TODO Log errors
+            //e.printStackTrace();
+        } catch (final ServiceConfigurationError sce) {
+            // TODO Log errors
+            //sce.printStackTrace();
+        }
+        return result;
+    }
+
+    /**
+     * If no name was explicitly given for a class, we will just
+     * use non-qualified class name
+     */
+    protected static String _defaultTypeId(Class<?> cls) {
+        String n = cls.getName();
+        int ix = n.lastIndexOf('.');
+        return (ix < 0) ? n : n.substring(ix + 1);
     }
 
     @Override
-    public JsonTypeInfo.Id getMechanism() { return JsonTypeInfo.Id.NAME; }
+    public JsonTypeInfo.Id getMechanism() {
+        return JsonTypeInfo.Id.NAME;
+    }
 
     @Override
     public String idFromValue(Object value) {
         return idFromClass(value.getClass());
     }
 
-    protected String idFromClass(Class<?> clazz)
-    {
+    protected String idFromClass(Class<?> clazz) {
         if (clazz == null) {
             return null;
         }
@@ -119,7 +192,7 @@ public class TypeNameIdResolver extends TypeIdResolverBase
         if (name == null) {
             // 29-Nov-2019, tatu: As per test in `TestTypeModifierNameResolution` somehow
             //    we need to do this odd piece here which seems unnecessary but isn't.
-            Class<?> cls = _typeFactory.constructType(clazz).getRawClass();                
+            Class<?> cls = _typeFactory.constructType(clazz).getRawClass();
             // 24-Feb-2011, tatu: As per [JACKSON-498], may need to dynamically look up name
             // can either throw an exception, or use default name...
             if (_config.isAnnotationProcessingEnabled()) {
@@ -149,7 +222,7 @@ public class TypeNameIdResolver extends TypeIdResolverBase
     public JavaType typeFromId(DatabindContext context, String id) {
         return _typeFromId(id);
     }
-    
+
     protected JavaType _typeFromId(String id) {
         // [databind#1983]: for case-insensitive lookups must canonicalize:
         if (_caseInsensitive) {
@@ -160,16 +233,11 @@ public class TypeNameIdResolver extends TypeIdResolverBase
         // could just try Class.forName)
         // For now let's not add any such workarounds; can add if need be
         return _idToType.get(id);
-    }    
+    }
 
     @Override
     public String getDescForKnownTypeIds() {
         return new TreeSet<String>(_idToType.keySet()).toString();
-    }
-
-    @Override
-    public String toString() {
-        return String.format("[%s; id-to-type=%s]", getClass().getName(), _idToType);
     }
 
     /*
@@ -177,15 +245,9 @@ public class TypeNameIdResolver extends TypeIdResolverBase
     /* Helper methods
     /*********************************************************
      */
-    
-    /**
-     * If no name was explicitly given for a class, we will just
-     * use non-qualified class name
-     */
-    protected static String _defaultTypeId(Class<?> cls)
-    {
-        String n = cls.getName();
-        int ix = n.lastIndexOf('.');
-        return (ix < 0) ? n : n.substring(ix+1);
+
+    @Override
+    public String toString() {
+        return String.format("[%s; id-to-type=%s]", getClass().getName(), _idToType);
     }
 }
