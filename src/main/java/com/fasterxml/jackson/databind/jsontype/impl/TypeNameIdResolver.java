@@ -12,13 +12,11 @@ import com.fasterxml.jackson.databind.jsontype.NamedType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
-import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -77,46 +75,38 @@ public class TypeNameIdResolver extends TypeIdResolverBase {
         }
         final boolean caseInsensitive = config.isEnabled(MapperFeature.ACCEPT_CASE_INSENSITIVE_VALUES);
         populateSerDesMaps(baseType.getRawClass(), subtypes, config, forSer, typeToId, forDeser, idToType
-                , caseInsensitive, new HashSet<Class<?>>());
+                , caseInsensitive);
         return new TypeNameIdResolver(config, baseType, typeToId, idToType);
     }
 
     private static void populateSerDesMaps(final Class<?> baseType, final Collection<NamedType> subtypes
             , final MapperConfig<?> config, final boolean toSer, final ConcurrentHashMap<String, String> serMap
-            , final boolean toDes, final HashMap<String, JavaType> desMap, final boolean caseInsensitive
-            , final Set<Class<?>> visited) {
+            , final boolean toDes, final HashMap<String, JavaType> desMap, final boolean caseInsensitive) {
         if (subtypes != null) {
             for (NamedType t : subtypes) {
                 // no name? Need to figure out default; for now, let's just
                 // use non-qualified class name
                 Class<?> cls = t.getType();
-                if (!visited.contains(cls)) {
-                    String id = t.hasName() ? t.getName() : _defaultTypeId(cls);
-                    if (toSer && serMap != null) {
-                        final String className = cls.getName();
-                        if (!serMap.contains(className)) {
-                            serMap.put(className, id);
+                String id = t.hasName() ? t.getName() : _defaultTypeId(cls);
+                if (toSer && serMap != null) {
+                    final String className = cls.getName();
+                    serMap.put(className, id);
+                }
+                if (toDes && desMap != null) {
+                    // [databind#1983]: for case-insensitive lookups must canonicalize:
+                    if (caseInsensitive) {
+                        id = id.toLowerCase();
+                    }
+                    // One more problem; sometimes we have same name for multiple types;
+                    // if so, use most specific
+                    JavaType prev = desMap.get(id);
+                    if (prev != null) { // Can only override if more specific
+                        if (cls.isAssignableFrom(prev.getRawClass())) { // nope, more generic (or same)
+                            continue;
                         }
                     }
-                    if (toDes && desMap != null) {
-                        // [databind#1983]: for case-insensitive lookups must canonicalize:
-                        if (caseInsensitive) {
-                            id = id.toLowerCase();
-                        }
-                        // One more problem; sometimes we have same name for multiple types;
-                        // if so, use most specific
-                        JavaType prev = desMap.get(id);
-                        if (prev != null) { // Can only override if more specific
-                            if (cls.isAssignableFrom(prev.getRawClass())) { // nope, more generic (or same)
-                                continue;
-                            }
-                        }
-                        final JavaType type = config.constructType(cls);
-                        if (!desMap.containsValue(type)) {
-                            desMap.put(id, type);
-                        }
-                    }
-                    visited.add(cls);
+                    final JavaType type = config.constructType(cls);
+                    desMap.put(id, type);
                 }
             }
         }
@@ -132,7 +122,6 @@ public class TypeNameIdResolver extends TypeIdResolverBase {
                         , toDes
                         , desMap
                         , caseInsensitive
-                        , visited
                 );
             }
         }
